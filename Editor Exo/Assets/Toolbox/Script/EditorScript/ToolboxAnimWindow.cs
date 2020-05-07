@@ -21,6 +21,8 @@ public class ToolboxAnimWindow : EditorWindow
 	private int currentAnimationClipIndex;
 	private bool isPlaying = false;
 
+	private float animationSpeed = 1;
+
 	private float editorLastTime;
 
 	[MenuItem("Toolbox/Toolbox Window")]
@@ -96,6 +98,7 @@ public class ToolboxAnimWindow : EditorWindow
 	}
 	#endregion
 
+	#region animation
 	private void DisplayAnimation()
 	{
 		animationClips = FindAnimClips(currentAnimator);
@@ -109,6 +112,8 @@ public class ToolboxAnimWindow : EditorWindow
 				PlayAnim();
 			};
 		}
+
+		animationSpeed = EditorGUILayout.Slider("Animation Speed", animationSpeed, 0f, 5f);
 	}
 
 	private void PlayAnim()
@@ -127,13 +132,15 @@ public class ToolboxAnimWindow : EditorWindow
 		AnimationMode.StopAnimationMode();
 		isPlaying = false;
 	}
+
 	private void _OnEditorUpdate()
 	{
-		float animTime = Time.realtimeSinceStartup - editorLastTime;
+		float animTime = (Time.realtimeSinceStartup - editorLastTime) * animationSpeed;
 		AnimationClip animclip = animationClips[currentAnimationClipIndex];
 		animTime %= animclip.length;
 		AnimationMode.SampleAnimationClip(currentAnimator.gameObject, animclip, animTime);
 	}
+	#endregion
 
 	private List<AnimationClip> FindAnimClips(Animator animator)
 	{
