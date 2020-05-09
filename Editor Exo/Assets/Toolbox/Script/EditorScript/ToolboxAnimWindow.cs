@@ -22,8 +22,15 @@ public class ToolboxAnimWindow : EditorWindow
 	private bool isPlaying = false;
 
 	private float animationSpeed = 1;
+	private float previousAnimTime;
+	private float animTime;
+
+	private float elapsedTime;
+	private float delay;
 
 	private float editorLastTime;
+
+	private PlayModeStateChange StateUnity;
 
 	[MenuItem("Toolbox/Toolbox Window")]
 	static void InitWindow()
@@ -37,14 +44,43 @@ public class ToolboxAnimWindow : EditorWindow
 	private void OnGUI()
 	{
 		tabIndex = GUILayout.Toolbar(tabIndex, tabs);
-
 		GUILayout.Space(10f);
 
-		switch (tabIndex)
+		EditorApplication.playModeStateChanged += StopAnimationSwitchMod;
+
+		switch (StateUnity)
 		{
-			case 0: GUIAnimatorSelect(); break;
-			case 1: if(currentAnimator != null) GUIAnimationDisplay(); break;
+			case PlayModeStateChange.EnteredEditMode:
+				switch (tabIndex)
+				{
+					case 0: GUIAnimatorSelect(); break;
+					case 1: if (currentAnimator != null) GUIAnimationDisplay(); break;
+				}
+				break;
+			case PlayModeStateChange.ExitingEditMode:
+				EditorGUILayout.HelpBox("You cannot use this tool in PlayMode", MessageType.Warning);
+				break;
+			case PlayModeStateChange.EnteredPlayMode:
+				EditorGUILayout.HelpBox("You cannot use this tool in PlayMode", MessageType.Warning);
+				break;
+			default:
+				throw new System.InvalidOperationException($"{StateUnity} is not part of PlayModeStateChange");
 		}
+	}
+
+	private void OnEnable()
+	{
+		if (Application.isPlaying)
+			StateUnity = PlayModeStateChange.EnteredPlayMode;
+	}
+
+	private void StopAnimationSwitchMod(PlayModeStateChange state)
+	{
+		if (state == PlayModeStateChange.EnteredPlayMode && isPlaying)
+			StopAnim();
+		if (state == PlayModeStateChange.ExitingPlayMode && isPlaying)
+			StopAnim();
+		StateUnity = state;
 	}
 
 	private void GUIAnimatorSelect()
@@ -63,7 +99,6 @@ public class ToolboxAnimWindow : EditorWindow
 	{
 		animatorList.Clear();
 		animtorButtonList.Clear();
-
 
 		foreach (GameObject rootGameObject in SceneManager.GetActiveScene().GetRootGameObjects())
 		{
@@ -114,6 +149,8 @@ public class ToolboxAnimWindow : EditorWindow
 		}
 
 		animationSpeed = EditorGUILayout.Slider("Animation Speed", animationSpeed, 0f, 5f);
+		delay = EditorGUILayout.Slider("Delay Between Animation", delay, 0f, 10f);
+		EditorGUILayout.FloatField("Animation Time", animTime % animationClips[currentAnimationClipIndex].length);
 	}
 
 	private void PlayAnim()
@@ -133,14 +170,43 @@ public class ToolboxAnimWindow : EditorWindow
 		isPlaying = false;
 	}
 
+	private bool isAwaiting;
 	private void _OnEditorUpdate()
 	{
-		float animTime = (Time.realtimeSinceStartup - editorLastTime) * animationSpeed;
-		AnimationClip animclip = animationClips[currentAnimationClipIndex];
-		animTime %= animclip.length;
-		AnimationMode.SampleAnimationClip(currentAnimator.gameObject, animclip, animTime);
+		if (!isAwaiting)
+		{
+			animTime = (Time.realtimeSinceStartup - editorLastTime) * animationSpeed;
+
+			if (animTime % animationClips[currentAnimationClipIndex].length < previousAnimTime % animationClips[currentAnimationClipIndex].length && delay != 0.0f)
+			{
+				isAwaiting = true;
+				return;
+			}
+
+			IncreaseTimeForAnimation();
+			previousAnimTime = animTime;
+		}
 	}
-	#endregion
+
+	private void Update() 
+	{
+		if (isAwaiting)
+			elapsedTime += Time.deltaTime;
+		if(elapsedTime >= delay && isAwaiting)
+		{
+			elapsedTime = 0;
+			previousAnimTime = 0;
+			editorLastTime = Time.realtimeSinceStartup;
+			isAwaiting = false;
+		}
+	}
+
+	private void IncreaseTimeForAnimation()
+	{
+		AnimationClip animclip = animationClips[currentAnimationClipIndex];
+		previousAnimTime %= animclip.length;
+		AnimationMode.SampleAnimationClip(currentAnimator.gameObject, animclip, previousAnimTime);
+	}
 
 	private List<AnimationClip> FindAnimClips(Animator animator)
 	{
@@ -160,4 +226,5 @@ public class ToolboxAnimWindow : EditorWindow
 
 		return resultList;
 	}
+	#endregion
 }
